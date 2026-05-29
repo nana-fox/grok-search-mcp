@@ -2,8 +2,12 @@
   "name": "grok-search-mcp",
   "version": "0.1.0",
   "type": "module",
-  "bin": { "grok-search-mcp": "dist/index.js" },
-  "files": ["dist"],
+  "bin": {
+    "grok-search-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -11,11 +15,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "undici": "^8.3.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
     "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   }
 }

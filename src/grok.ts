@@ -1,3 +1,10 @@
+import { EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
+
+// Node 的原生 fetch 默认忽略 HTTP(S)_PROXY 环境变量,会直连。
+// 在需要代理出网的环境(如直连 api.x.ai 不通时),显式让 fetch 走环境变量里的代理。
+// 无代理 env 时,EnvHttpProxyAgent 表现为普通直连,安全无副作用。
+setGlobalDispatcher(new EnvHttpProxyAgent());
+
 export interface GrokSearchParams {
   query: string;
   recency?: "day" | "week" | "month";
