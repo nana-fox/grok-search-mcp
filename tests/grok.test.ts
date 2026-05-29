@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildInput, parseGrokResponse } from "../src/grok.js";
+import { buildInput, parseGrokResponse, callGrokSearch, buildRequestBody } from "../src/grok.js";
 
 describe("buildInput", () => {
   it("只有 query 时原样返回(trim)", () => {
@@ -53,5 +53,41 @@ describe("parseGrokResponse", () => {
       ],
     });
     expect(r.citations).toEqual([]);
+  });
+});
+
+describe("buildRequestBody", () => {
+  it("组装 model/input/tools", () => {
+    const body = buildRequestBody({ query: "hi" }, "grok-4.3");
+    expect(body.model).toBe("grok-4.3");
+    expect(body.input[0]).toMatchObject({ role: "user" });
+    expect(body.tools).toEqual([{ type: "web_search" }, { type: "x_search" }]);
+  });
+});
+
+describe("callGrokSearch", () => {
+  it("成功时解析答案", async () => {
+    const fakeFetch = async () =>
+      new Response(
+        JSON.stringify({
+          output: [
+            { type: "message", content: [{ type: "output_text", text: "答案", annotations: [] }] },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    const r = await callGrokSearch(
+      { query: "q" },
+      { apiKey: "k", model: "grok-4.3", fetchImpl: fakeFetch as typeof fetch }
+    );
+    expect(r.answer).toBe("答案");
+  });
+
+  it("非 2xx 时抛出含状态码的错误", async () => {
+    const fakeFetch = async () =>
+      new Response("bad key", { status: 401, statusText: "Unauthorized" });
+    await expect(
+      callGrokSearch({ query: "q" }, { apiKey: "k", model: "grok-4.3", fetchImpl: fakeFetch as typeof fetch })
+    ).rejects.toThrow("401");
   });
 });

@@ -79,3 +79,35 @@ export function parseGrokResponse(json: unknown): GrokSearchResult {
   }
   return { answer, citations };
 }
+
+const DEFAULT_BASE_URL = "https://api.x.ai/v1";
+
+export function buildRequestBody(params: GrokSearchParams, model: string) {
+  return {
+    model,
+    input: [{ role: "user", content: buildInput(params) }],
+    tools: [{ type: "web_search" }, { type: "x_search" }],
+  };
+}
+
+export async function callGrokSearch(
+  params: GrokSearchParams,
+  config: GrokConfig
+): Promise<GrokSearchResult> {
+  const doFetch = config.fetchImpl ?? fetch;
+  const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
+  const res = await doFetch(`${baseUrl}/responses`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify(buildRequestBody(params, config.model)),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`xAI API 错误 ${res.status}: ${detail || res.statusText}`);
+  }
+  const json = await res.json();
+  return parseGrokResponse(json);
+}
