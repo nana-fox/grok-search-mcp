@@ -6,7 +6,7 @@ export function formatResult(result: GrokSearchResult): string {
   }
   const lines = result.citations.map((c, i) => {
     const n = i + 1;
-    const isNumberTitle = c.title === String(n) || /^\d+$/.test(c.title);
+    const isNumberTitle = c.title === String(n);
     return isNumberTitle ? `${n}. ${c.url}` : `${n}. ${c.title} — ${c.url}`;
   });
   return `${result.answer}\n\n---\n来源:\n${lines.join("\n")}`;

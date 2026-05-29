@@ -7,12 +7,11 @@ describe("buildInput", () => {
   });
   it("带 recency 时追加时间约束", () => {
     const out = buildInput({ query: "AI 新闻", recency: "week" });
-    expect(out).toContain("AI 新闻");
-    expect(out).toContain("过去一周");
+    expect(out).toBe("AI 新闻\n\n优先使用过去一周内的信息。");
   });
   it("带 maxSources 时追加来源数量约束", () => {
     const out = buildInput({ query: "x", maxSources: 3 });
-    expect(out).toContain("最多引用 3 个来源");
+    expect(out).toBe("x\n\n最多引用 3 个来源。");
   });
 });
 

@@ -60,8 +60,10 @@ export function parseGrokResponse(json: unknown): GrokSearchResult {
     ? ((textItem as { text: string }).text)
     : "";
   if (!answer) {
+    // 缺少答案文本无法恢复:这是核心返回值,直接抛错。
     throw new Error("Grok 响应中未找到答案文本");
   }
+  // 缺少 annotations(来源)是可接受的:回退为空列表,不抛错。
   const annotations = Array.isArray((textItem as { annotations?: unknown })?.annotations)
     ? ((textItem as { annotations: unknown[] }).annotations)
     : [];

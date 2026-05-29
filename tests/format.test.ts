@@ -22,4 +22,9 @@ describe("formatResult", () => {
     expect(out).toContain("xAI 官网");
     expect(out).toContain("https://x.ai");
   });
+  it("纯数字但非编号的标题不被抑制", () => {
+    const out = formatResult({ answer: "x", citations: [{ title: "2024", url: "https://a.com" }] });
+    expect(out).toContain("2024");
+    expect(out).toContain("https://a.com");
+  });
 });

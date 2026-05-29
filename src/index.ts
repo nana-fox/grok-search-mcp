@@ -10,6 +10,7 @@ if (!apiKey) {
   console.error("[grok-search-mcp] 缺少 XAI_API_KEY 环境变量,无法启动。");
   process.exit(1);
 }
+// grok-4.3 是 xAI 当前官方旗舰默认模型(见 https://docs.x.ai/developers/models);GROK_MODEL 可覆盖。
 const model = process.env.GROK_MODEL ?? "grok-4.3";
 
 const server = new McpServer({ name: "grok-search-mcp", version: "0.1.0" });
