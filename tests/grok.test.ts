@@ -89,4 +89,49 @@ describe("callGrokSearch", () => {
       callGrokSearch({ query: "q" }, { apiKey: "k", model: "grok-4.3", fetchImpl: fakeFetch as typeof fetch })
     ).rejects.toThrow("401");
   });
+
+  it("未配置 baseUrl 时打官方 endpoint", async () => {
+    let calledUrl = "";
+    const fakeFetch = async (url: string | URL) => {
+      calledUrl = String(url);
+      return new Response(
+        JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: "答案", annotations: [] }] }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    };
+    await callGrokSearch({ query: "q" }, { apiKey: "k", model: "grok-4.3", fetchImpl: fakeFetch as typeof fetch });
+    expect(calledUrl).toBe("https://api.x.ai/v1/responses");
+  });
+
+  it("配置 baseUrl(中转站)时打自定义 endpoint", async () => {
+    let calledUrl = "";
+    const fakeFetch = async (url: string | URL) => {
+      calledUrl = String(url);
+      return new Response(
+        JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: "答案", annotations: [] }] }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    };
+    await callGrokSearch(
+      { query: "q" },
+      { apiKey: "k", model: "grok-4.3", baseUrl: "https://relay.example.com/v1", fetchImpl: fakeFetch as typeof fetch }
+    );
+    expect(calledUrl).toBe("https://relay.example.com/v1/responses");
+  });
+
+  it("baseUrl 带尾斜杠时归一化,避免双斜杠", async () => {
+    let calledUrl = "";
+    const fakeFetch = async (url: string | URL) => {
+      calledUrl = String(url);
+      return new Response(
+        JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: "答案", annotations: [] }] }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    };
+    await callGrokSearch(
+      { query: "q" },
+      { apiKey: "k", model: "grok-4.3", baseUrl: "https://relay.example.com/v1/", fetchImpl: fakeFetch as typeof fetch }
+    );
+    expect(calledUrl).toBe("https://relay.example.com/v1/responses");
+  });
 });

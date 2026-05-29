@@ -12,6 +12,9 @@ if (!apiKey) {
 }
 // grok-4.3 是 xAI 当前官方旗舰默认模型(见 https://docs.x.ai/developers/models);GROK_MODEL 可覆盖。
 const model = process.env.GROK_MODEL ?? "grok-4.3";
+// 可选:指向第三方中转站(如 NanaFocus),只要它兼容 xAI Responses API。
+// 不设则用官方默认 https://api.x.ai/v1。空字符串视为未设置。
+const baseUrl = process.env.XAI_BASE_URL || undefined;
 
 const server = new McpServer({ name: "grok-search-mcp", version: "0.1.0" });
 
@@ -31,7 +34,7 @@ server.registerTool(
     try {
       const result = await callGrokSearch(
         { query, recency, maxSources: max_sources },
-        { apiKey, model }
+        { apiKey, model, baseUrl }
       );
       return { content: [{ type: "text", text: formatResult(result) }] };
     } catch (err) {

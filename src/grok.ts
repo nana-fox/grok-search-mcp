@@ -104,7 +104,8 @@ export async function callGrokSearch(
   config: GrokConfig
 ): Promise<GrokSearchResult> {
   const doFetch = config.fetchImpl ?? fetch;
-  const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
+  // 去掉尾部斜杠,避免 baseUrl 带 "/" 时拼出 "//responses"(中转站 URL 常带尾斜杠)。
+  const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
   const res = await doFetch(`${baseUrl}/responses`, {
     method: "POST",
     headers: {

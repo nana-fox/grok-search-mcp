@@ -9,8 +9,9 @@ if (!apiKey) {
   process.exit(0);
 }
 const model = process.env.GROK_MODEL ?? "grok-4.3";
+const baseUrl = process.env.XAI_BASE_URL || undefined;
 const result = await callGrokSearch(
   { query: "xAI 最近发布了什么?", recency: "week" },
-  { apiKey, model }
+  { apiKey, model, baseUrl }
 );
 console.log(formatResult(result));
