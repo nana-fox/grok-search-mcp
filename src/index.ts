@@ -23,7 +23,7 @@ server.registerTool(
   {
     title: "Grok 实时搜索",
     description:
-      "用 xAI Grok 实时搜索网页和 X(Twitter),返回综合答案与来源。Grok 自动决定使用哪些数据源。",
+      "当需要实时/最新信息,或 X(Twitter)上的社交、舆论、突发内容时,用 xAI Grok 搜索实时网页和 X,返回综合答案与带链接的来源。Grok 自动决定使用哪些数据源。",
     inputSchema: {
       query: z.string().describe("搜索或提问内容"),
       recency: z.enum(["day", "week", "month"]).optional().describe("时间偏好"),

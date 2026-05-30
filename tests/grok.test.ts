@@ -119,6 +119,22 @@ describe("callGrokSearch", () => {
     expect(calledUrl).toBe("https://relay.example.com/v1/responses");
   });
 
+  it("超时时中断请求并抛出超时错误", async () => {
+    // 永不 resolve 的 fetch,只在收到 abort 信号时 reject —— 模拟挂起的搜索。
+    const hangingFetch = (_url: string | URL, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError"))
+        );
+      });
+    await expect(
+      callGrokSearch(
+        { query: "q" },
+        { apiKey: "k", model: "grok-4.3", timeoutMs: 10, fetchImpl: hangingFetch as typeof fetch }
+      )
+    ).rejects.toThrow("超时");
+  });
+
   it("baseUrl 带尾斜杠时归一化,避免双斜杠", async () => {
     let calledUrl = "";
     const fakeFetch = async (url: string | URL) => {

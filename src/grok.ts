@@ -26,6 +26,7 @@ export interface GrokConfig {
   model: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }
 
 const RECENCY_LABEL: Record<NonNullable<GrokSearchParams["recency"]>, string> = {
@@ -90,6 +91,9 @@ export function parseGrokResponse(json: unknown): GrokSearchResult {
 }
 
 const DEFAULT_BASE_URL = "https://api.x.ai/v1";
+// 搜索可能因网络/中转站慢而长时间挂起。作为被智能体自主调用的工具,
+// 必须有超时,否则一次卡住的请求会阻塞整个会话。默认 30s,可经 config 覆盖。
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 export function buildRequestBody(params: GrokSearchParams, model: string) {
   return {
@@ -106,14 +110,31 @@ export async function callGrokSearch(
   const doFetch = config.fetchImpl ?? fetch;
   // 去掉尾部斜杠,避免 baseUrl 带 "/" 时拼出 "//responses"(中转站 URL 常带尾斜杠)。
   const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-  const res = await doFetch(`${baseUrl}/responses`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify(buildRequestBody(params, config.model)),
-  });
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  let res: Response;
+  try {
+    res = await doFetch(`${baseUrl}/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(buildRequestBody(params, config.model)),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    // 区分"我们主动超时"与其它网络错误,给调用方明确信号。
+    if (timedOut) throw new Error(`搜索超时(${timeoutMs}ms)`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(`xAI API 错误 ${res.status}: ${detail || res.statusText}`);
