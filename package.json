@@ -1,7 +1,13 @@
 {
   "name": "grok-search-mcp",
   "version": "0.1.0",
+  "description": "Local MCP server exposing xAI Grok realtime web + X search as a grok_search tool for Claude Code.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nana-fox/grok-search-mcp.git"
+  },
   "bin": {
     "grok-search-mcp": "dist/index.js"
   },
