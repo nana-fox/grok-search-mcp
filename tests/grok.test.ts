@@ -135,6 +135,54 @@ describe("callGrokSearch", () => {
     ).rejects.toThrow("超时");
   });
 
+  const okResponse = () =>
+    new Response(
+      JSON.stringify({
+        output: [{ type: "message", content: [{ type: "output_text", text: "答案", annotations: [] }] }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+
+  it("遇到 503 时重试,随后成功", async () => {
+    let calls = 0;
+    const flakyFetch = async () => {
+      calls++;
+      return calls === 1
+        ? new Response("upstream down", { status: 503, statusText: "Service Unavailable" })
+        : okResponse();
+    };
+    const r = await callGrokSearch(
+      { query: "q" },
+      { apiKey: "k", model: "grok-4.3", retries: 2, fetchImpl: flakyFetch as typeof fetch }
+    );
+    expect(r.answer).toBe("答案");
+    expect(calls).toBe(2);
+  });
+
+  it("4xx(如 401)不重试,直接抛错", async () => {
+    let calls = 0;
+    const fakeFetch = async () => {
+      calls++;
+      return new Response("bad key", { status: 401, statusText: "Unauthorized" });
+    };
+    await expect(
+      callGrokSearch({ query: "q" }, { apiKey: "k", model: "grok-4.3", retries: 2, fetchImpl: fakeFetch as typeof fetch })
+    ).rejects.toThrow("401");
+    expect(calls).toBe(1);
+  });
+
+  it("持续 503 时重试用尽后抛错", async () => {
+    let calls = 0;
+    const downFetch = async () => {
+      calls++;
+      return new Response("down", { status: 503, statusText: "Service Unavailable" });
+    };
+    await expect(
+      callGrokSearch({ query: "q" }, { apiKey: "k", model: "grok-4.3", retries: 1, fetchImpl: downFetch as typeof fetch })
+    ).rejects.toThrow("503");
+    expect(calls).toBe(2); // 1 次初始 + 1 次重试
+  });
+
   it("baseUrl 带尾斜杠时归一化,避免双斜杠", async () => {
     let calledUrl = "";
     const fakeFetch = async (url: string | URL) => {

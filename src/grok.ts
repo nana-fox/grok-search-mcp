@@ -27,6 +27,7 @@ export interface GrokConfig {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  retries?: number;
 }
 
 const RECENCY_LABEL: Record<NonNullable<GrokSearchParams["recency"]>, string> = {
@@ -91,9 +92,26 @@ export function parseGrokResponse(json: unknown): GrokSearchResult {
 }
 
 const DEFAULT_BASE_URL = "https://api.x.ai/v1";
-// 搜索可能因网络/中转站慢而长时间挂起。作为被智能体自主调用的工具,
-// 必须有超时,否则一次卡住的请求会阻塞整个会话。默认 30s,可经 config 覆盖。
-const DEFAULT_TIMEOUT_MS = 30_000;
+// Grok 的"边搜边推理"是非流式一次性返回,实测常需几十秒,30s 会误杀慢请求。
+// 官方对推理模型建议把超时调到分钟级(见 docs.x.ai streaming 指南),这里默认 120s,可经 config 覆盖。
+const DEFAULT_TIMEOUT_MS = 120_000;
+// 5xx/429 多为上游(xAI 或中转站)瞬时不可用,可重试;默认额外重试 2 次。
+const DEFAULT_RETRIES = 2;
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+// 指数退避:300ms、600ms、1200ms…上限 4s。
+function backoffMs(attempt: number): number {
+  return Math.min(300 * 2 ** attempt, 4000);
+}
+// 优先采用响应里的 Retry-After(秒);无则用退避。
+function retryDelayMs(res: Response, attempt: number): number {
+  const header = res.headers.get("retry-after");
+  const sec = header ? Number(header) : NaN;
+  return Number.isFinite(sec) ? sec * 1000 : backoffMs(attempt);
+}
 
 export function buildRequestBody(params: GrokSearchParams, model: string) {
   return {
@@ -111,34 +129,58 @@ export async function callGrokSearch(
   // 去掉尾部斜杠,避免 baseUrl 带 "/" 时拼出 "//responses"(中转站 URL 常带尾斜杠)。
   const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  let res: Response;
-  try {
-    res = await doFetch(`${baseUrl}/responses`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify(buildRequestBody(params, config.model)),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    // 区分"我们主动超时"与其它网络错误,给调用方明确信号。
-    if (timedOut) throw new Error(`搜索超时(${timeoutMs}ms)`);
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok) {
+  const maxRetries = config.retries ?? DEFAULT_RETRIES;
+  const url = `${baseUrl}/responses`;
+  const body = JSON.stringify(buildRequestBody(params, config.model));
+
+  let lastError: Error = new Error("搜索失败");
+  // attempt 从 0 起,共最多 maxRetries+1 次。
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+    let res: Response;
+    try {
+      res = await doFetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        body,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      // 主动超时:已等满 timeoutMs,不重试,直接报错。
+      if (timedOut) throw new Error(`搜索超时(${timeoutMs}ms)`);
+      // 其它网络错误:可重试。
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        await sleep(backoffMs(attempt));
+        continue;
+      }
+      throw lastError;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (res.ok) {
+      const json = await res.json();
+      return parseGrokResponse(json);
+    }
+
     const detail = await res.text().catch(() => "");
-    throw new Error(`xAI API 错误 ${res.status}: ${detail || res.statusText}`);
+    const error = new Error(`xAI API 错误 ${res.status}: ${detail || res.statusText}`);
+    // 5xx/429 是上游瞬时不可用,可重试;4xx(如 401 key 错)直接抛,不浪费重试。
+    if (RETRYABLE_STATUS.has(res.status) && attempt < maxRetries) {
+      lastError = error;
+      await sleep(retryDelayMs(res, attempt));
+      continue;
+    }
+    throw error;
   }
-  const json = await res.json();
-  return parseGrokResponse(json);
+  throw lastError;
 }
