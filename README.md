@@ -1,7 +1,7 @@
 # grok-search-mcp
 
 本地 MCP server,把 xAI Grok 的实时搜索(Web Search + X Search)接入 Claude Code。
-直连官方 `https://api.x.ai/v1/responses`,Node 原生 fetch,无第三方 HTTP/搜索库。
+默认直连官方 `https://api.x.ai/v1/responses`,Node 原生 fetch + undici(仅用于 HTTPS 代理),无第三方搜索库。
 
 ## 工具
 
@@ -9,31 +9,43 @@
 
 ## 安装
 
+在仓库目录下:
+
 ```bash
 npm install
 npm run build
+npm link          # 注册全局命令 grok-search-mcp(走 package.json 的 bin),接入时无需写绝对路径
 ```
+
+> 用 nvm 的注意:`npm link` 绑定到当前 Node 版本的全局目录。之后 `nvm use` 切到别的版本时,
+> 该命令在新版本下不可见,需在仓库里重新 `npm link`。本项目依赖 Node ≥ 22.19。
 
 ## 接入 Claude Code
 
 ```bash
-claude mcp add grok-search -e XAI_API_KEY=xai-你的key \
-  -- node /Users/nio/project/nanafox/grok-search-mcp/dist/index.js
+claude mcp add --scope user grok-search \
+  -e XAI_API_KEY=xai-你的key \
+  -- grok-search-mcp
 ```
 
-接入后 `/mcp` 应出现 `grok_search`。可选设 `GROK_MODEL` 覆盖默认模型。
+`--scope user` 让它在本机所有项目里可用(搜索工具通常希望随处可用)。接入后 `/mcp` 应出现
+`grok_search`。可选加 `-e GROK_MODEL=grok-4.3` 覆盖默认模型。
+
+走第三方中转站,只需再加一个 `XAI_BASE_URL`,并把 `XAI_API_KEY` 换成中转站的 key:
+
+```bash
+claude mcp add --scope user grok-search \
+  -e XAI_API_KEY=中转站key \
+  -e XAI_BASE_URL=https://your-relay.example.com/v1 \
+  -- grok-search-mcp
+```
+
+> 尚未发布到 npm。发布后可省去 clone/build/link,直接 `-- npx -y @scope/grok-search-mcp@latest`。
 
 ## 第三方中转站
 
-默认直连官方 `https://api.x.ai/v1`。若要走第三方中转站(需兼容 xAI Responses API,
-即支持 `/responses` 与 `web_search`/`x_search` 工具,如 NanaFocus),设 `XAI_BASE_URL`,
-并把 `XAI_API_KEY` 换成中转站的 key:
-
-```bash
-XAI_BASE_URL=https://your-relay.example.com/v1 XAI_API_KEY=中转站key npm run smoke
-```
-
-接入中转站前,可先用一条 curl 探活,确认它真支持带搜索工具的 Responses API:
+中转站需兼容 xAI Responses API(支持 `/responses` 端点与 `web_search`/`x_search` 工具,如 NanaFocus)。
+接入前可先用一条 curl 探活,确认它真支持带搜索工具的 Responses API:
 
 ```bash
 curl https://your-relay.example.com/v1/responses \
@@ -52,7 +64,7 @@ XAI_API_KEY=xai-你的key npm run smoke
 
 ## 设计与可审计性
 
-- 运行时依赖仅:`@modelcontextprotocol/sdk`(官方)、`zod`。
+- 运行时依赖:`@modelcontextprotocol/sdk`(官方)、`zod`、`undici`(代理支持)。
 - 所有对 xAI 的请求都在 `src/grok.ts` 一处,用原生 fetch,可逐行审计。
 
 ## 未来可选项(本期未实现)
